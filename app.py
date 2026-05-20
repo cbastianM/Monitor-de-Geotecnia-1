@@ -5,8 +5,8 @@ import os
 # ==========================================
 # CONFIGURACIÓN PRINCIPAL
 # ==========================================
-MODELO = "openrouter/free"
-NOMBRE_MODELO_VISIBLE = "OpenRouter Free (Llama/Mistral/Nemotron)" # Nombre amigable para mostrar
+MODELO = "openrouter/auto"
+NOMBRE_MODELO_VISIBLE = "OpenRouter (modelo seleccionado automáticamente)"
 CARPETA_BASE = "CONTENIDO"
 
 # ==========================================
@@ -92,38 +92,33 @@ REGLAS GLOBALES (aplican en todos los modos):
 """
 
 # ==========================================
-# INTERFAZ DE USUARIO (CONFIGURACIÓN INICIAL)
+# CONFIGURACIÓN DE PÁGINA
 # ==========================================
 st.set_page_config(page_title="Monitor Geotecnia 1", page_icon="🪨", layout="centered")
 
 st.markdown("""
 <style>
     .stChatMessage { border-radius: 12px; margin-bottom: 8px; }
-    .modo-badge {
+    .modelo-firma {
         display: inline-block;
         padding: 2px 10px;
         border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-left: 8px;
-    }
-    .modelo-firma {
-        display: block;
-        text-align: right;
-        font-size: 0.7rem;
-        color: #888;
-        margin-top: 8px;
+        font-size: 0.70rem;
+        font-weight: 500;
+        color: var(--text-color);
+        opacity: 0.55;
+        margin-top: 6px;
         font-style: italic;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# SIDEBAR: API Key, Tutorial y Opciones
+# SIDEBAR
 # ==========================================
 with st.sidebar:
     st.header("🔑 Configuración de API")
-    
+
     with st.expander("📖 ¿Cómo obtener tu API Key gratis?"):
         st.markdown("""
         1. Entra en **[OpenRouter.ai](https://openrouter.ai/)**.
@@ -131,24 +126,23 @@ with st.sidebar:
         3. Ve al menú y haz clic en **[Keys](https://openrouter.ai/keys)**.
         4. Pulsa **"Create Key"**, dale un nombre y copia la clave generada.
         5. Pégala en el campo de texto de abajo.
-        
-        💡 *Nota: Esta app usa el modelo `openrouter/free`, que es **100% gratuito** y no requiere añadir saldo ni tarjeta de crédito.*
+
+        💡 *Nota: Esta app usa modelos gratuitos de OpenRouter. No requiere saldo ni tarjeta de crédito.*
         """)
-    
+
     user_api_key = st.text_input(
-        "Pega tu OpenRouter API Key:", 
-        type="password", 
+        "Pega tu OpenRouter API Key:",
+        type="password",
         placeholder="sk-or-v1-..."
     )
-    
+
     st.divider()
-    
-    # --- INFORMACIÓN DEL MODELO ACTUAL ---
+
     st.header("🤖 Modelo en uso")
-    st.info(f"**{NOMBRE_MODELO_VISIBLE}**\n\n`{MODELO}`")
-    
+    st.info(f"**{NOMBRE_MODELO_VISIBLE}**\n\n`{MODELO}`\n\nEl modelo real usado en cada respuesta aparece debajo del mensaje.")
+
     st.divider()
-    
+
     st.header("⚙️ Opciones")
     if st.button("🔄 Reiniciar conversación", use_container_width=True, type="secondary"):
         st.session_state.mensajes = []
@@ -203,13 +197,11 @@ modo = st.radio(
     index=0,
 )
 
-colores_modo = {"Tutor": "#2563eb", "Pista": "#d97706", "Solución": "#16a34a"}
-st.caption(f"**Tema:** {tema_seleccionado}  ·  **Ejercicio:** {ejercicio_seleccionado.replace('.md', '')}")
-
+st.caption(f"**Tema:** {tema_seleccionado}  ·  **Ejercicio:** {ejercicio_seleccionado.replace('.md', '')}  ·  **Modo:** {modo}")
 st.divider()
 
 # ==========================================
-# LÓGICA DEL CHAT
+# INICIALIZACIÓN DEL ESTADO
 # ==========================================
 id_ejercicio = f"{tema_seleccionado}/{ejercicio_seleccionado}/{modo}"
 
@@ -226,56 +218,96 @@ cliente = OpenAI(
     api_key=user_api_key,
 )
 
-# Texto de firma del modelo para añadir al final de las respuestas
-firma_modelo = f'<span class="modelo-firma">🤖 Respondido por: {NOMBRE_MODELO_VISIBLE} </span>'
+# ==========================================
+# HELPER: renderizar firma del modelo
+# ==========================================
+def mostrar_firma(nombre_modelo: str):
+    # Acortar nombres largos estilo "meta-llama/llama-3.1-70b-instruct:free"
+    # para mostrar solo la parte útil
+    partes = nombre_modelo.split("/")
+    nombre_corto = partes[-1] if len(partes) > 1 else nombre_modelo
+    nombre_corto = nombre_corto.replace(":free", " (free)").replace(":nitro", " (nitro)")
+    proveedor = partes[0] if len(partes) > 1 else ""
 
-# --- BIENVENIDA ESTÁTICA ---
+    texto = f"🤖 {proveedor} · {nombre_corto}" if proveedor else f"🤖 {nombre_corto}"
+    st.markdown(f'<span class="modelo-firma">{texto}</span>', unsafe_allow_html=True)
+
+# ==========================================
+# BIENVENIDA ESTÁTICA (solo si no hay historial)
+# ==========================================
 if len(st.session_state.mensajes) == 0:
     with st.chat_message("assistant"):
         st.markdown(
-            f"¡Hola! 👋 Soy tu monitor de **Mecánica de Suelos**. "
-            f"Selecciona un tema y un ejercicio, elige el modo que prefieras y escríbeme cuando estés listo. ¡Estoy aquí para ayudarte!"
+            "¡Hola! 👋 Soy tu monitor de **Mecánica de Suelos**. "
+            "Selecciona un tema y un ejercicio, elige el modo que prefieras y escríbeme cuando estés listo. "
+            "¡Estoy aquí para ayudarte!"
         )
-        st.markdown(firma_modelo, unsafe_allow_html=True)
 
-# --- MOSTRAR HISTORIAL ---
+# ==========================================
+# MOSTRAR HISTORIAL
+# ==========================================
 for mensaje in st.session_state.mensajes:
     if not mensaje.get("oculto", False):
         with st.chat_message(mensaje["role"]):
             st.markdown(mensaje["content"])
-            # Si es un mensaje del asistente, mostrar la firma del modelo
             if mensaje["role"] == "assistant":
-                st.markdown(firma_modelo, unsafe_allow_html=True)
+                mostrar_firma(mensaje.get("modelo", NOMBRE_MODELO_VISIBLE))
 
-# --- INPUT DEL USUARIO ---
+# ==========================================
+# INPUT Y RESPUESTA
+# ==========================================
 if prompt := st.chat_input("Escribe tu pregunta sobre este ejercicio..."):
     st.session_state.mensajes.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Construir historial para la API
     mensajes_api = [{"role": "system", "content": prompt_sistema}]
     for m in st.session_state.mensajes:
         mensajes_api.append({"role": m["role"], "content": m["content"]})
 
     with st.chat_message("assistant"):
-        contenedor_respuesta = st.empty()
-        contenedor_respuesta.markdown("🧠 *Pensando...*")
+        placeholder = st.empty()
         respuesta_completa = ""
+        modelo_usado = None  # Se captura del primer chunk que lo incluya
+
         try:
             stream = cliente.chat.completions.create(
                 model=MODELO,
                 messages=mensajes_api,
                 stream=True,
             )
+
             for trozo in stream:
-                if trozo.choices[0].delta.content is not None:
-                    respuesta_completa += trozo.choices[0].delta.content
-                    contenedor_respuesta.markdown(respuesta_completa + "▌")
-            
-            # Mostrar respuesta final + firma del modelo
-            contenedor_respuesta.markdown(respuesta_completa)
-            st.markdown(firma_modelo, unsafe_allow_html=True)
-            
-            st.session_state.mensajes.append({"role": "assistant", "content": respuesta_completa})
+                # ── Capturar el modelo real del primer chunk disponible ──
+                if modelo_usado is None:
+                    modelo_raw = getattr(trozo, "model", None)
+                    # OpenRouter devuelve el modelo concreto (ej. "meta-llama/llama-3.3-70b-instruct:free")
+                    # Solo lo guardamos si es distinto al string de routing genérico
+                    if modelo_raw and modelo_raw not in (MODELO, "openrouter/auto", "openrouter/free", ""):
+                        modelo_usado = modelo_raw
+
+                delta = trozo.choices[0].delta.content
+                if delta is not None:
+                    respuesta_completa += delta
+                    # Durante el stream mostramos texto plano para no romper
+                    # bloques $$ que aún están incompletos
+                    palabras = len(respuesta_completa.split())
+                    placeholder.caption(f"✍️ Generando... ({palabras} palabras)")
+
+            # ── Render final: markdown completo con LaTeX bien formado ──
+            placeholder.markdown(respuesta_completa)
+
+            # Firma con el modelo real (o el genérico si no se capturó)
+            nombre_final = modelo_usado if modelo_usado else NOMBRE_MODELO_VISIBLE
+            mostrar_firma(nombre_final)
+
+            # Guardar en historial incluyendo el modelo usado
+            st.session_state.mensajes.append({
+                "role": "assistant",
+                "content": respuesta_completa,
+                "modelo": nombre_final,
+            })
+
         except Exception as e:
-            st.error(f"Error al conectar con OpenRouter: {e}")
+            placeholder.error(f"Error al conectar con OpenRouter: {e}")
