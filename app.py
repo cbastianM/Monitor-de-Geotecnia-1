@@ -5,7 +5,7 @@ import os
 # ==========================================
 # CONFIGURACIÓN PRINCIPAL
 # ==========================================
-MODELO = "openrouter/auto"
+MODELO = "openrouter/free"
 NOMBRE_MODELO_VISIBLE = "OpenRouter (modelo seleccionado automáticamente)"
 CARPETA_BASE = "CONTENIDO"
 
