@@ -24,10 +24,12 @@ def listar_temas() -> list[str]:
     ])
 
 def listar_ejercicios(tema: str) -> list[str]:
+    import re
     ruta = os.path.join(CARPETA_CONTENIDO, tema)
     if not os.path.isdir(ruta):
         return []
-    return sorted([f for f in os.listdir(ruta) if f.endswith(".md")])
+    archivos = [f for f in os.listdir(ruta) if f.endswith(".md")]
+    return sorted(archivos, key=lambda f: [int(x) if x.isdigit() else x.lower() for x in re.split(r'(\d+)', f)])
 
 def cargar_md(tema: str, archivo: str) -> tuple[str | None, str | None]:
     ruta = os.path.join(CARPETA_CONTENIDO, tema, archivo)
